@@ -23,5 +23,43 @@
   top: 0;
 }
 </style>
+<div id="controls">
+  <label>X: <input id="x" type="number" value="0"></label>
+  <label>Y: <input id="y" type="number" value="0"></label>
+</div>
+
+<div id="stage">
+  <img src="src/dog.svg" id="dog">
+</div>
+
+<style>
+#stage {
+  width: 480px;
+  height: 360px;
+  background: white;
+  outline: 3px solid #333;
+  position: relative;
+}
+
+#dog {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+</style>
+
+<script>
+const dog = document.getElementById("dog");
+const x = document.getElementById("x");
+const y = document.getElementById("y");
+
+function moveDog() {
+  dog.style.left = x.value + "px";
+  dog.style.top = y.value + "px";
+}
+
+x.addEventListener("input", moveDog);
+y.addEventListener("input", moveDog);
+</script>
 </body>
 </html>
