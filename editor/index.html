@@ -161,6 +161,310 @@ document.getElementById("clear").onclick = () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 };
 </script>
+<div id="costumeelememt">
+  <div id="costume-tools">
+    <button data-tool="select">↖</button>
+    <button data-tool="brush">✎</button>
+    <button data-tool="line">╱</button>
+    <button data-tool="rect">□</button>
+    <button data-tool="circle">○</button>
+    <button data-tool="erase">⌫</button>
+    <button id="delete">🗑</button>
+    <button id="clear">Clear</button>
+  </div>
+  <canvas id="costume-canvas" width="480" height="360"></canvas>
+</div>
+
+<style>
+#costumeelememt {
+  width: 480px;
+}
+
+#costume-tools {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: #eee;
+  border: 1px solid #ccc;
+}
+
+#costume-tools button {
+  min-width: 38px;
+  height: 34px;
+  border: 1px solid #bbb;
+  background: white;
+  cursor: pointer;
+}
+
+#costume-tools button.active {
+  background: #4a90e2;
+  color: white;
+}
+
+#costume-canvas {
+  display: block;
+  background: white;
+  border: 2px solid #333;
+  cursor: crosshair;
+}
+</style>
+
+<script>
+const canvas = document.getElementById("costume-canvas");
+const ctx = canvas.getContext("2d");
+
+let tool = "select";
+let drawing = false;
+let selected = null;
+let startX = 0;
+let startY = 0;
+let preview = null;
+let objects = [];
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (const obj of objects) {
+    ctx.beginPath();
+    ctx.lineWidth = obj.size || 4;
+    ctx.strokeStyle = "#222";
+
+    if (obj.type === "brush") {
+      ctx.moveTo(obj.points[0].x, obj.points[0].y);
+      for (const p of obj.points.slice(1))
+        ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+
+    if (obj.type === "line") {
+      ctx.moveTo(obj.x1, obj.y1);
+      ctx.lineTo(obj.x2, obj.y2);
+      ctx.stroke();
+    }
+
+    if (obj.type === "rect")
+      ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+
+    if (obj.type === "circle") {
+      ctx.arc(obj.x, obj.y, obj.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    if (obj === selected) {
+      const box = getBounds(obj);
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = "#4285f4";
+      ctx.strokeRect(
+        box.x - 5,
+        box.y - 5,
+        box.w + 10,
+        box.h + 10
+      );
+      ctx.setLineDash([]);
+    }
+  }
+
+  if (preview) {
+    ctx.beginPath();
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = "#888";
+
+    if (preview.type === "line") {
+      ctx.moveTo(preview.x1, preview.y1);
+      ctx.lineTo(preview.x2, preview.y2);
+    }
+
+    if (preview.type === "rect")
+      ctx.rect(preview.x, preview.y, preview.w, preview.h);
+
+    if (preview.type === "circle")
+      ctx.arc(preview.x, preview.y, preview.r, 0, Math.PI * 2);
+
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function getBounds(o) {
+  if (o.type === "line")
+    return {
+      x: Math.min(o.x1, o.x2),
+      y: Math.min(o.y1, o.y2),
+      w: Math.abs(o.x2 - o.x1),
+      h: Math.abs(o.y2 - o.y1)
+    };
+
+  if (o.type === "rect")
+    return {
+      x: Math.min(o.x, o.x + o.w),
+      y: Math.min(o.y, o.y + o.h),
+      w: Math.abs(o.w),
+      h: Math.abs(o.h)
+    };
+
+  if (o.type === "circle")
+    return {
+      x: o.x - o.r,
+      y: o.y - o.r,
+      w: o.r * 2,
+      h: o.r * 2
+    };
+
+  if (o.type === "brush") {
+    const xs = o.points.map(p => p.x);
+    const ys = o.points.map(p => p.y);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return {
+      x,
+      y,
+      w: Math.max(...xs) - x,
+      h: Math.max(...ys) - y
+    };
+  }
+}
+
+function hitTest(x, y) {
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const b = getBounds(objects[i]);
+    if (
+      x >= b.x - 8 &&
+      x <= b.x + b.w + 8 &&
+      y >= b.y - 8 &&
+      y <= b.y + b.h + 8
+    )
+      return objects[i];
+  }
+  return null;
+}
+
+document.querySelectorAll("[data-tool]").forEach(button => {
+  button.onclick = () => {
+    tool = button.dataset.tool;
+    selected = null;
+
+    document.querySelectorAll("[data-tool]")
+      .forEach(b => b.classList.remove("active"));
+
+    button.classList.add("active");
+    draw();
+  };
+});
+
+canvas.onpointerdown = e => {
+  const x = e.offsetX;
+  const y = e.offsetY;
+
+  startX = x;
+  startY = y;
+  drawing = true;
+
+  if (tool === "select") {
+    selected = hitTest(x, y);
+    draw();
+    return;
+  }
+
+  if (tool === "erase") {
+    const hit = hitTest(x, y);
+    if (hit) {
+      objects = objects.filter(o => o !== hit);
+      draw();
+    }
+    return;
+  }
+
+  if (tool === "brush") {
+    preview = {
+      type: "brush",
+      points: [{x, y}]
+    };
+  }
+};
+
+canvas.onpointermove = e => {
+  if (!drawing) return;
+
+  const x = e.offsetX;
+  const y = e.offsetY;
+
+  if (tool === "brush") {
+    preview.points.push({x, y});
+    draw();
+
+    ctx.beginPath();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#222";
+
+    const p = preview.points;
+    ctx.moveTo(p[0].x, p[0].y);
+
+    for (const point of p.slice(1))
+      ctx.lineTo(point.x, point.y);
+
+    ctx.stroke();
+    return;
+  }
+
+  if (tool === "line")
+    preview = {
+      type: "line",
+      x1: startX,
+      y1: startY,
+      x2: x,
+      y2: y
+    };
+
+  if (tool === "rect")
+    preview = {
+      type: "rect",
+      x: startX,
+      y: startY,
+      w: x - startX,
+      h: y - startY
+    };
+
+  if (tool === "circle")
+    preview = {
+      type: "circle",
+      x: startX,
+      y: startY,
+      r: Math.hypot(x - startX, y - startY)
+    };
+
+  draw();
+};
+
+canvas.onpointerup = () => {
+  if (!drawing) return;
+  drawing = false;
+
+  if (preview && tool !== "brush")
+    objects.push(preview);
+
+  if (preview && tool === "brush")
+    objects.push(preview);
+
+  preview = null;
+  draw();
+};
+
+document.getElementById("delete").onclick = () => {
+  if (selected) {
+    objects = objects.filter(o => o !== selected);
+    selected = null;
+    draw();
+  }
+};
+
+document.getElementById("clear").onclick = () => {
+  objects = [];
+  selected = null;
+  draw();
+};
+
+document.querySelector('[data-tool="select"]').classList.add("active");
+</script>
   <span>Sounds</span>
   <button id="visibility">👁️</button>
 </div>
